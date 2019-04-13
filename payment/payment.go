@@ -64,6 +64,75 @@ type order struct {
 	ExpiredAt string `xml:"time_expire,omitempty"` // 交易结束时间 订单失效时间 格式为yyyyMMddHHmmss
 }
 
+//查询订单
+type OrderQuery struct {
+	AppID      string `xml:"appid"`        // 小程序ID
+	MchID      string `xml:"mch_id"`       // 商户号
+	OutTradeNo string `xml:"out_trade_no"` // 商户订单号
+}
+
+type orderQuery struct {
+	XMLName xml.Name `xml:"xml"`
+	OrderQuery
+	Sign     string `xml:"sign"` // 签名
+	NonceStr string `xml:"nonce_str"`
+}
+
+type PaidQueryResponse struct {
+	AppID      string `xml:"appid"`       // 小程序ID
+	MchID      string `xml:"mch_id"`      // 商户号
+	NonceStr   string `xml:"nonce_str"`   // 随机字符串
+	Sign       string `xml:"sign"`        // 签名
+	TradeState string `xml:"trade_state"` //支付结果
+}
+
+type paidQueryResponse struct {
+	response
+	PaidQueryResponse
+}
+
+//查询订单准备
+func (qo *OrderQuery) prequery(key string) (orderQuery, error) {
+	qod := orderQuery{
+		OrderQuery: *qo,
+		NonceStr:   util.RandomString(32),
+	}
+	signDate := map[string]string{
+		"appid":        qod.AppID,
+		"mch_id":       qod.MchID,
+		"out_trade_no": qod.OutTradeNo,
+		"nonce_str":    qod.NonceStr,
+	}
+	sign, err := util.SignByMD5(signDate, key)
+	if err != nil {
+		return qod, err
+	}
+	qod.Sign = sign
+	fmt.Print(qod)
+	return qod, nil
+}
+
+//查询订单
+func (qo OrderQuery) Unify(key string) (qpres PaidQueryResponse, err error) {
+	reqData, err := qo.prequery(key)
+	if err != nil {
+		return
+	}
+	data, err := util.PostXML(baseURL+queryAPI, reqData)
+	if err != nil {
+		return
+	}
+	var res paidQueryResponse
+	if err = xml.Unmarshal(data, &res); err != nil {
+		return
+	}
+	if err = res.Check(); err != nil {
+		return
+	}
+	qpres = res.PaidQueryResponse
+	return
+}
+
 // 请求前准备
 func (o *Order) prepare(key string) (order, error) {
 
